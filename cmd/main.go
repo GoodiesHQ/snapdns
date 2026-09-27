@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -20,6 +20,7 @@ func main() {
 	var outFilename string
 	var group string
 	var aJsonFilename, bJsonFilename string
+	var verbose bool
 
 	// yaml configuration
 	flag.StringVar(&configFilename, "config", configDefault, "Configuration YAML file")
@@ -33,28 +34,39 @@ func main() {
 	// json comparison
 	flag.StringVar(&aJsonFilename, "a", "", "used for comparing two json output files (requires -b)")
 	flag.StringVar(&bJsonFilename, "b", "", "used for comparing two json output files (requires -a)")
+	// verbosity
+	flag.BoolVar(&verbose, "verbose", false, "Enable debug output")
+	flag.BoolVar(&verbose, "v", false, "alias for --output")
 
 	flag.Parse()
+
+	if verbose {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 
 	// for file comparison, we don't need to execute any functionality
 	if aJsonFilename != "" && bJsonFilename != "" {
 		aJsonRaw, err := os.ReadFile(aJsonFilename)
 		if err != nil {
-			log.Fatalf("unable to read file %q", aJsonFilename)
+			slog.Error("unable to read file", "filename", aJsonFilename)
+			os.Exit(1)
 		}
 
 		bJsonRaw, err := os.ReadFile(bJsonFilename)
 		if err != nil {
-			log.Fatalf("unable to read file %q", bJsonFilename)
+			slog.Error("unable to read file", "filename", bJsonFilename)
+			os.Exit(1)
 		}
 
 		var aSnap, bSnap lookups.Snapshot
 
 		if err := json.Unmarshal(aJsonRaw, &aSnap); err != nil {
-			log.Fatalf("invalid json snapshot from %q", aJsonFilename)
+			slog.Error("invalid json snapshot", "filename", aJsonFilename)
+			os.Exit(1)
 		}
 		if err := json.Unmarshal(bJsonRaw, &bSnap); err != nil {
-			log.Fatalf("invalid json snapshot from %q", bJsonFilename)
+			slog.Error("invalid json snapshot", "filename", bJsonFilename)
+			os.Exit(1)
 		}
 
 		lookups.Compare(&aSnap, &bSnap)
@@ -62,18 +74,20 @@ func main() {
 	}
 
 	if configFilename == "" {
-		log.Fatal("configuration is required")
+		slog.Error("configuration is required")
+		os.Exit(1)
 	}
 	if group == "" {
-		log.Fatal("resolver group is required")
+		slog.Error("resolver group is required")
+		os.Exit(1)
 	}
-
-	fmt.Println("Filename: " + configFilename)
 
 	cfg, err := config.ReadConfig(configFilename)
 	if err != nil {
-		log.Fatalf("Error: %v\n", err)
+		slog.Error("failed to read the configuration", "config", configFilename, "err", err)
+		os.Exit(1)
 	}
+	slog.Debug("loaded snapdns configuration", "config", configFilename)
 
 	var resolver *config.Resolver
 	for i := range cfg.Resolvers {
@@ -83,7 +97,8 @@ func main() {
 		}
 	}
 	if resolver == nil {
-		log.Fatalf("resolver group %q does not exist in %s", group, configFilename)
+		slog.Error("resolver group does not exist", "config", configFilename, "group", group)
+		os.Exit(1)
 	}
 
 	var snapshot = lookups.Snapshot{
@@ -100,6 +115,7 @@ func main() {
 		} else {
 			fqdn = strings.TrimSuffix(name, ".") + "." + strings.TrimLeft(cfg.Domain, ".")
 		}
+		slog.Debug("looking up records", "fqdn", fqdn, "types", recordTypes)
 
 		for _, recordType := range recordTypes {
 			res, err := lookups.Query(
@@ -109,7 +125,8 @@ func main() {
 				recordType,
 			)
 			if err != nil {
-				log.Fatalf("dns query failed: %v", err)
+				slog.Error("dns query failed", "err", err)
+				os.Exit(1)
 			}
 
 			snapshot.Results = append(snapshot.Results, res)
@@ -118,12 +135,14 @@ func main() {
 
 	snapshotJson, err := json.MarshalIndent(snapshot, "", "    ")
 	if err != nil {
-		log.Fatalf("failed to marshal: %v", err)
+		slog.Error("failed to marshal", "err", err)
+		os.Exit(1)
 	}
 
 	if outFilename == "" {
 		fmt.Println(string(snapshotJson))
 	} else {
 		os.WriteFile(outFilename, snapshotJson, 0644)
+		slog.Debug("completed snapshot", "output", outFilename)
 	}
 }
