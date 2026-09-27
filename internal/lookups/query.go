@@ -9,13 +9,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-type Snapshot struct {
-	Domain        string    `json:"domain"`
-	ResolverGroup string    `json:"resolver_group"`
-	Timestamp     time.Time `json:"timestamp"`
-	Results       []Result  `json:"results"`
-}
-
 type Result struct {
 	Name    string             `json:"name"`
 	Type    records.RecordType `json:"type"`

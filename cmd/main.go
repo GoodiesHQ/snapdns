@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/goodieshq/snapdns/internal/config"
 	"github.com/goodieshq/snapdns/internal/lookups"
@@ -89,53 +87,16 @@ func main() {
 	}
 	slog.Debug("loaded snapdns configuration", "config", configFilename)
 
-	var resolver *config.Resolver
-	for i := range cfg.Resolvers {
-		if cfg.Resolvers[i].Name == group {
-			resolver = &cfg.Resolvers[i]
-			break
-		}
-	}
-	if resolver == nil {
-		slog.Error("resolver group does not exist", "config", configFilename, "group", group)
+	ctx := context.Background()
+	snapshot, err := lookups.GetSnapshot(ctx, cfg, group)
+	if err != nil {
+		slog.Error("failed to get snapshot", "err", err)
 		os.Exit(1)
-	}
-
-	var snapshot = lookups.Snapshot{
-		Domain:        cfg.Domain,
-		ResolverGroup: group,
-		Timestamp:     time.Now(),
-		Results:       make([]lookups.Result, 0),
-	}
-
-	for name, recordTypes := range cfg.Records {
-		var fqdn string
-		if name == "@" {
-			fqdn = strings.Trim(cfg.Domain, ".")
-		} else {
-			fqdn = strings.TrimSuffix(name, ".") + "." + strings.TrimLeft(cfg.Domain, ".")
-		}
-		slog.Debug("looking up records", "fqdn", fqdn, "types", recordTypes)
-
-		for _, recordType := range recordTypes {
-			res, err := lookups.Query(
-				context.Background(),
-				resolver.Servers,
-				fqdn,
-				recordType,
-			)
-			if err != nil {
-				slog.Error("dns query failed", "err", err)
-				os.Exit(1)
-			}
-
-			snapshot.Results = append(snapshot.Results, res)
-		}
 	}
 
 	snapshotJson, err := json.MarshalIndent(snapshot, "", "    ")
 	if err != nil {
-		slog.Error("failed to marshal", "err", err)
+		slog.Error("failed to marshal snapshot to JSON", "err", err)
 		os.Exit(1)
 	}
 
