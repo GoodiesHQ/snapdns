@@ -92,7 +92,7 @@ func ReadConfig(filename string) (*Config, error) {
 
 			if recordType == records.RecordTypeCNAME &&
 				(slices.Contains(normalized, records.RecordTypeA) || slices.Contains(normalized, records.RecordTypeAAAA)) {
-				return nil, fmt.Errorf("cname cannot be combined with a/aaaa records", name)
+				return nil, fmt.Errorf("cname cannot be combined with a/aaaa records: %q", name)
 			}
 		}
 
