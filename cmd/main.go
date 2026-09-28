@@ -43,7 +43,12 @@ func main() {
 	}
 
 	// for file comparison, we don't need to execute any functionality
-	if aJsonFilename != "" && bJsonFilename != "" {
+	if aJsonFilename != "" || bJsonFilename != "" {
+		if aJsonFilename == "" || bJsonFilename == "" {
+			slog.Error("both -a and -b must be provided to perform a comparison")
+			os.Exit(1)
+		}
+
 		aJsonRaw, err := os.ReadFile(aJsonFilename)
 		if err != nil {
 			slog.Error("unable to read file", "filename", aJsonFilename)
